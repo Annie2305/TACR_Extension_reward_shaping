@@ -1,2 +1,2 @@
 Dataset,Reward_Mode,Initial_Asset,Final_Asset,Sharpe_Ratio,MDD,Turnover_Rate
-hightech,None,1000000,1053584,0.2921,-0.2709,0.391
+ndx,None,1000000,1391436,0.6684,-0.3513,0.0029
