@@ -2,11 +2,11 @@
 __pycache__/
 *.pyc
 
-# Large Data & Trajectories (Too big for GitHub)
+# Large Data & Trajectories
 trajectory/
 datasets/
 
-# Results (Optional: keep if you want to save plots, remove if too many files)
+# Results
 # results/
 
 # System files
@@ -17,3 +17,5 @@ datasets/
 # Environment
 miniconda3/
 env/
+
+*.pt
