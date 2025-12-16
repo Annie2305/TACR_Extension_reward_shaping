@@ -85,7 +85,8 @@ class FeatureEngineer:
             print("Successfully added turbulence index")
 
         # fill the missing values at the beginning and the end
-        df = df.fillna(method="ffill").fillna(method="bfill")
+        # FIX: method='ffill' is deprecated in newer pandas versions
+        df = df.ffill().bfill()
         df = df.replace([np.inf, -np.inf], 0.)
         return df
 
@@ -119,7 +120,9 @@ class FeatureEngineer:
         unique_ticker = stock.tic.unique()
 
         for indicator in self.tech_indicator_list:
-            indicator_df = pd.DataFrame()
+            # FIX 1: Use a list to store dataframes instead of appending repeatedly
+            temp_indicator_dfs = []
+            
             for i in range(len(unique_ticker)):
                 try:
                     temp_indicator = stock[stock.tic == unique_ticker[i]][indicator]
@@ -128,14 +131,24 @@ class FeatureEngineer:
                     temp_indicator["date"] = df[df.tic == unique_ticker[i]][
                         "date"
                     ].to_list()
-                    indicator_df = indicator_df.append(
-                        temp_indicator, ignore_index=True
-                    )
+                    
+                    # Store in list
+                    temp_indicator_dfs.append(temp_indicator)
+                    
                 except Exception as e:
-                    print(e)
-            df = df.merge(
-                indicator_df[["tic", "date", indicator]], on=["tic", "date"], how="left"
-            )
+                    print(f"Error calculating {indicator} for {unique_ticker[i]}: {e}")
+            
+            # FIX 2: Concatenate once at the end
+            if len(temp_indicator_dfs) > 0:
+                indicator_df = pd.concat(temp_indicator_dfs, ignore_index=True)
+                
+                # Merge logic
+                df = df.merge(
+                    indicator_df[["tic", "date", indicator]], on=["tic", "date"], how="left"
+                )
+            else:
+                print(f"Warning: No data calculated for indicator {indicator}")
+
         df = df.sort_values(by=["date", "tic"])
         return df
 

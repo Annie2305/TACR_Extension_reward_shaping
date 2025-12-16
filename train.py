@@ -10,22 +10,33 @@ import torch
 from tac.models.transformer_actor import TransformerActor
 from tac.training.seq_trainer import SequenceTrainer
 import torch.backends.cudnn as cudnn
+import os
 
 def main(variant):
     device = variant.get('device', 'cuda')
     log_to_wandb = variant.get('log_to_wandb', False)
 
     env_name, dataset = variant['env'], variant['dataset']
-    group_name = f'{env_name}-{dataset}'
+    reward_mode = variant['reward'] # Get reward mode
+
+    # FIX 1: Update group name to include reward mode so models don't overwrite each other
+    group_name = f'{env_name}-{dataset}-{reward_mode}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
     train = pd.read_csv("datasets/"+dataset+"_train.csv", index_col=[0])
     max_ep_len = train.index[-1]
 
-    # Load suboptimal trajectories
-    dataset_path = f'{"trajectory/" + variant["dataset"] + "_traj.pkl"}'
+    # FIX 2: Load the specific reward-shaped trajectory file
+    # Matches the naming convention from create_data.py: "dataset_reward_traj.pkl"
+    dataset_path = f'{"trajectory/" + dataset + "_" + reward_mode + "_traj.pkl"}'
+    
+    print(f"Loading trajectories from: {dataset_path}")
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(f"Could not find {dataset_path}. Did you run create_data.py with --reward {reward_mode}?")
+
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
+    
     state_space=trajectories[0]['observations'].shape[1]
     stock_dimension = len(train.tic.unique())
 
@@ -40,10 +51,11 @@ def main(variant):
         "stock_dim": stock_dimension,
         "tech_indicator_list": config.TECHNICAL_INDICATORS_LIST,
         "action_space": stock_dimension,
+        "reward_mode": reward_mode # Pass this in case Env needs it
     }
     env = StockPortfolioEnv(df=train, **env_kwargs)
 
-    # Set seed 0
+    # Set seed
     seed = variant['seed']
     env.seed(seed)
     env.action_space.seed(seed)
@@ -89,7 +101,7 @@ def main(variant):
     num_timesteps = sum(traj_lens)
 
     print('=' * 50)
-    print(f'Starting new experiment: {env_name} {dataset}')
+    print(f'Starting new experiment: {env_name} {dataset} ({reward_mode})')
     print(f'{len(traj_lens)} trajectories, {num_timesteps} timesteps found')
     print(f'Average return: {np.mean(returns):.2f}, std: {np.std(returns):.2f}')
     print(f'Max return: {np.max(returns):.2f}, min: {np.min(returns):.2f}')
@@ -206,15 +218,21 @@ def main(variant):
         if log_to_wandb:
             wandb.log(outputs)
 
-    torch.save(trainer.actor.state_dict(), group_name+'.pt')
+    # FIX 3: Save file with group name (which includes the reward mode)
+    save_path = group_name + '.pt'
+    torch.save(trainer.actor.state_dict(), save_path)
+    print(f"Model saved to {save_path}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='kdd')  # kdd, hightech, dow, ndx, mdax, csi
+    parser.add_argument('--dataset', type=str, default='kdd')
+    # FIX 4: Add reward argument to match create_data.py
+    parser.add_argument('--reward', type=str, default='none', choices=['none', 'atr', 'sharpe'], help='Reward shaping mode')
+    
     parser.add_argument('--env', type=str, default='stock')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--u', type=int, default=20) # 40 (kdd, hightech, dow), 20 (ndx, mdax, csi)
-    parser.add_argument('--alpha', type=int, default=0.9) # 1.6 (kdd), 2. (hightech), 1.4 (dow), 0.9 (ndx, mdax, csi)
+    parser.add_argument('--u', type=int, default=20) 
+    parser.add_argument('--alpha', type=int, default=0.9) 
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--embed_dim', type=int, default=128)
@@ -223,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--critic_learning_rate', type=float, default=1e-6) # 1e-4 (hightech), 1e-6 (others)
+    parser.add_argument('--critic_learning_rate', type=float, default=1e-6)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=10000)
     parser.add_argument('--max_iters', type=int, default=10)

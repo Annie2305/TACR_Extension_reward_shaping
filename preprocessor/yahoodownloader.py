@@ -44,11 +44,26 @@ class YahooDownloader:
             for the specified stock ticker
         """
         # Download and save the data in a pandas DataFrame:
-        data_df = pd.DataFrame()
+        data_dfs = [] # Use a list to store dataframes
+        
         for tic in self.ticker_list:
-            temp_df = yf.download(tic, start=self.start_date, end=self.end_date)
+            # FIX 1: auto_adjust=False ensures we get 'Adj Close'. 
+            # FIX 2: actions=False ensures we DON'T get Dividends/Splits columns (which would break the renaming)
+            temp_df = yf.download(tic, start=self.start_date, end=self.end_date, auto_adjust=False, actions=False)
+            
+            # FIX 3: Flatten MultiIndex columns (Fix for yfinance v0.2+ returning (Price, Ticker))
+            if isinstance(temp_df.columns, pd.MultiIndex):
+                temp_df.columns = temp_df.columns.get_level_values(0)
+
             temp_df["tic"] = tic
-            data_df = data_df.append(temp_df)
+            data_dfs.append(temp_df) 
+        
+        # FIX 4: Use pd.concat instead of append
+        if len(data_dfs) > 0:
+            data_df = pd.concat(data_dfs)
+        else:
+            data_df = pd.DataFrame()
+
         # reset the index, we want to use numbers as index instead of dates
         data_df = data_df.reset_index()
         try:

@@ -16,21 +16,32 @@ def experiment(variant):
     device = variant.get('device', 'cuda')
 
     env_name, dataset = variant['env'], variant['dataset']
-    group_name = f'{env_name}-{dataset}'
+    reward_mode = variant['reward']  # Get reward mode from args
+
+    # FIX 1: Update group_name to match train.py so we load the correct model file
+    group_name = f'{env_name}-{dataset}-{reward_mode}'
 
     train = pd.read_csv("datasets/" + dataset+"_train.csv", index_col=[0])
     trade = pd.read_csv("datasets/" + dataset + "_trade.csv", index_col=[0])
     max_ep_len = train.index[-1]
 
-    dataset_path = f'{"trajectory/" + variant["dataset"] + "_traj.pkl"}'
+    # FIX 2: Load the specific reward-shaped trajectory file used during training
+    dataset_path = f'{"trajectory/" + dataset + "_" + reward_mode + "_traj.pkl"}'
+    
+    print(f"Loading trajectories from: {dataset_path}")
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(f"Trajectory file {dataset_path} not found. Run create_data.py with --reward {reward_mode}")
+
     with open(dataset_path, 'rb') as f:
         trajectories = pickle.load(f)
+        
     state_space = trajectories[0]['observations'].shape[1]
     stock_dimension = len(train.tic.unique())
 
     print(f"Stock Dimension: {stock_dimension}, State Space: {state_space}")
 
     turbulence_threshold = 100 if dataset == "dow" else None
+    
     env_kwargs = {
         "dataset": dataset,
         "initial_amount": 1000000,
@@ -41,6 +52,7 @@ def experiment(variant):
         "action_space": stock_dimension,
         "mode": "test",
         "turbulence_threshold": turbulence_threshold,
+        "reward_mode": reward_mode # Pass reward mode for consistency
     }
 
     env = StockPortfolioEnv(df=trade, **env_kwargs)
@@ -82,7 +94,13 @@ def experiment(variant):
         resid_pdrop=variant['dropout'],
         attn_pdrop=variant['dropout'])
 
-    model.load_state_dict(torch.load(group_name+'.pt'))
+    # FIX 3: Load the specific model file
+    model_path = group_name + '.pt'
+    print(f"Loading model weights from: {model_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file {model_path} not found. Did you run train.py with --reward {reward_mode}?")
+        
+    model.load_state_dict(torch.load(model_path))
 
     eval_test(
         env,
@@ -97,7 +115,10 @@ def experiment(variant):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='csi')  # kdd, hightech, dow,  ndx, mdax, csi
+    parser.add_argument('--dataset', type=str, default='csi')
+    # FIX 4: Add reward argument
+    parser.add_argument('--reward', type=str, default='none', choices=['none', 'atr', 'sharpe'], help='Reward shaping mode')
+    
     parser.add_argument('--env', type=str, default='stock')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--u', type=int, default=20)

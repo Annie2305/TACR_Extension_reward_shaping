@@ -11,13 +11,6 @@ import os
 
 def create_data(variant):
     #Create datasets
-    # DOW (2009-01-01 ~ 2020-09-24),
-    # HIGHECH (2006-10-20 ~ 2013-11-21),
-    # S&P (2009-01-01 ~ 2021-12-31),
-    # MDAX (2009-01-01 ~ 2021-12-31),
-    # HSI (2009-01-01 ~ 2021-12-31),
-    # CSI (2009-01-01 ~ 2021-12-31)
-
     if variant['dataset']=="dow":
         df = YahooDownloader(start_date = '2009-01-01',
                               end_date = '2020-09-24',
@@ -39,9 +32,7 @@ def create_data(variant):
                             end_date = '2021-12-31',
                             ticker_list = config.CSI_TICKER).fetch_data()
 
-    df.sort_values(['date','tic'],ignore_index=True).head()
-
-    # Add technical indicator (macd, boll_ub, boll_lb, rsi_30, cci_30, dx_30, close_30_sma, close_60_sma)
+    # Add technical indicator
     fe = FeatureEngineer(
                         use_technical_indicator=True,
                         tech_indicator_list = config.TECHNICAL_INDICATORS_LIST,
@@ -58,8 +49,7 @@ def create_data(variant):
     processed_full = processed_full[processed_full['date'].isin(processed['date'])]
     processed_full = processed_full.sort_values(['date','tic'])
     processed_full = processed_full.fillna(0)
-    processed_full.sort_values(['date','tic'],ignore_index=True).head(10)
-
+    
     # Split train and test datasets
     if variant['dataset'] == "dow":
         train = data_split(processed_full, '2009-01-01','2019-01-01')
@@ -86,12 +76,15 @@ def create_data(variant):
     state_space = 4 * stock_dimension + len(config.TECHNICAL_INDICATORS_LIST) * stock_dimension
     print(f"Stock Dimension: {stock_dimension}, State Space: {state_space}")
 
+    # Pass the reward mode to env_kwargs
     env_kwargs = {
         "state_space": state_space,
         "stock_dim": stock_dimension,
         "tech_indicator_list": config.TECHNICAL_INDICATORS_LIST,
-        "action_space": stock_dimension
+        "action_space": stock_dimension,
+        "reward_mode": variant['reward']  # Added this line
     }
+    
     env = trajectory(df=train, dataset=variant['dataset'], **env_kwargs)
 
     def traj_generator(env, episode):
@@ -116,7 +109,7 @@ def create_data(variant):
         rews = np.array(rews)
         term = np.array(term)
         acs = np.array(acs)
-        print(np.sum(rews))
+        print(f"Episode {episode} Reward Sum: {np.sum(rews)}")
         traj = {"observations": obs, "rewards": rews, "dones": term, "actions": acs}
         return traj
 
@@ -129,15 +122,18 @@ def create_data(variant):
     if not os.path.exists("trajectory"):
         os.makedirs("trajectory")
 
-    name = f'{"trajectory/"+variant["dataset"]+"_traj"}'
+    # Save with reward mode in filename to avoid confusion
+    name = f'{"trajectory/"+variant["dataset"]+"_"+variant["reward"]+"_traj"}'
     with open(f'{name}.pkl', 'wb') as f:
         pickle.dump(paths, f)
 
-    print("Created trajectories")
+    print(f"Created trajectories with {variant['reward']} reward shaping at {name}.pkl")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='hightech') #dow, hightech, ndx, mdax, csi (kdd was already given)
+    parser.add_argument('--dataset', type=str, default='hightech')
+    # Added argument for reward
+    parser.add_argument('--reward', type=str, default='none', choices=['none', 'atr', 'sharpe'], help='Reward shaping mode: none, atr, or sharpe') 
 
     args = parser.parse_args()
     create_data(variant=vars(args))
