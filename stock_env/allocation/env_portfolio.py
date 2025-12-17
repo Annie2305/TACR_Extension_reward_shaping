@@ -104,51 +104,62 @@ class StockPortfolioEnv(gym.Env):
                         (252 ** 0.5)
                         * df_daily_return_adj["daily_return"].mean()
                         / df_daily_return_adj["daily_return"].std())
+            
+            # B. Sortino
+            sortino = 0
+            downside_returns = df_daily_return_adj.loc[df_daily_return_adj['daily_return'] < 0, 'daily_return']
+            if len(downside_returns) > 0 and downside_returns.std() != 0:
+                downside_std = downside_returns.std()
+                sortino = (
+                    (252 ** 0.5) 
+                    * df_daily_return_adj["daily_return"].mean() 
+                    / downside_std
+                )
 
-            # B. MDD (Max Drawdown)
+            # C. MDD (Max Drawdown)
             df_asset = pd.DataFrame(self.asset_memory)
             df_asset.columns = ["asset"]
             roll_max = df_asset["asset"].cummax()
             drawdown = df_asset["asset"] / roll_max - 1.0
             max_drawdown = drawdown.min()
 
-            # C. Turnover Rate
+            # D. Turnover Rate
             action_df = pd.DataFrame(self.actions_memory)
             turnover_df = action_df.diff().abs().sum(axis=1) / 2
             turnover_rate = turnover_df.mean()
 
             # --- 3. Save Summary Statistics to CSV ---
+            # FIX: Filename now includes dataset name to prevent overwriting
             summary_data = {
                 "Dataset": [self.dataset],
                 "Reward_Mode": [folder_name],
                 "Initial_Asset": [self.asset_memory[0]],
                 "Final_Asset": [int(self.portfolio_value)],
                 "Sharpe_Ratio": [round(sharpe, 4)],
+                "Sortino_Ratio": [round(sortino, 4)],
                 "MDD": [round(max_drawdown, 4)],
                 "Turnover_Rate": [round(turnover_rate, 4)]
             }
             df_summary = pd.DataFrame(summary_data)
-            summary_csv_path = os.path.join(save_path, "results_summary.csv")
+            
+            # UNIQUE FILENAME: results_summary_hightech.csv, results_summary_dow.csv, etc.
+            summary_csv_path = os.path.join(save_path, f"results_summary_{self.dataset}.csv")
+            
             df_summary.to_csv(summary_csv_path, index=False)
             print(f"Summary results saved to {summary_csv_path}")
 
             # --- 4. Print Table to Terminal ---
-            print("\n" + "="*95)
-            print(f"{'Dataset':<10} | {'Reward':<10} | {'Init Asset':<12} | {'Final Asset':<12} | {'Sharpe':<8} | {'MDD':<8} | {'Turnover':<8}")
-            print("-" * 95)
-            print(f"{self.dataset:<10} | {folder_name:<10} | {self.asset_memory[0]:<12} | {int(self.portfolio_value):<12} | {sharpe:.3f}    | {max_drawdown:.4f}   | {turnover_rate:.4f}")
-            print("="*95 + "\n")
+            print("\n" + "="*105)
+            print(f"{'Dataset':<10} | {'Reward':<10} | {'Init Asset':<12} | {'Final Asset':<12} | {'Sharpe':<8} | {'Sortino':<8} | {'MDD':<8} | {'Turnover':<8}")
+            print("-" * 105)
+            print(f"{self.dataset:<10} | {folder_name:<10} | {self.asset_memory[0]:<12} | {int(self.portfolio_value):<12} | {sharpe:.3f}    | {sortino:.3f}    | {max_drawdown:.4f}   | {turnover_rate:.4f}")
+            print("="*105 + "\n")
 
             # --- 5. Plotting ---
-
-            # Convert date strings to datetime objects for proper formatting
             date_objects = pd.to_datetime(self.date_memory)
 
-            # Helper function to apply the style
             def style_plot(ax):
-                # Solid grid
                 ax.grid(True) 
-                # Set X-axis to Year-Month format (e.g. 2024-01)
                 ax.xaxis.set_major_locator(mdates.AutoDateLocator())
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
 
@@ -166,7 +177,6 @@ class StockPortfolioEnv(gym.Env):
             # PLOT 2: Daily Rewards
             plt.figure(figsize=(12, 6))
             ax2 = plt.gca()
-            # FIX: Removed [:-1] to match dimensions
             ax2.plot(date_objects, self.portfolio_return_memory, "r") 
             ax2.set_title(f"Daily Reward - {self.dataset} ({folder_name})", fontsize=16)
             ax2.set_xlabel("Date", fontsize=12)
@@ -176,7 +186,6 @@ class StockPortfolioEnv(gym.Env):
             plt.close()
 
             if self.mode == "test":
-                # Save CSVs
                 df_actions = self.save_action_memory()
                 df_actions.to_csv(os.path.join(save_path, "actions_{}.csv".format(self.mode)))
 
@@ -188,18 +197,13 @@ class StockPortfolioEnv(gym.Env):
                 ax3 = plt.gca()
                 ax3.plot(date_objects, df_asset["asset"], "r")
                 
-                # Main Title
                 plt.suptitle(f"Portfolio Value Over Time - {self.dataset} ({folder_name})", fontsize=16, y=0.96)
-                
-                # Subtitle with stats
-                subtitle = f"Final Asset: ${int(self.portfolio_value):,} | Sharpe: {sharpe:.3f} | MDD: {max_drawdown:.2%} | Turnover: {turnover_rate:.3f}"
+                subtitle = f"Final Asset: ${int(self.portfolio_value):,} | Sharpe: {sharpe:.3f} | Sortino: {sortino:.3f} | MDD: {max_drawdown:.2%} | Turnover: {turnover_rate:.3f}"
                 ax3.set_title(subtitle, fontsize=12, pad=10, color='black')
 
                 ax3.set_xlabel("Date", fontsize=12)
                 ax3.set_ylabel("Asset Value ($)", fontsize=12)
-                
                 style_plot(ax3)
-                
                 plt.tight_layout()
                 plt.savefig(os.path.join(save_path, "{}_account_value_{}.png".format(self.dataset, self.mode)))
                 plt.close()
@@ -263,7 +267,6 @@ class StockPortfolioEnv(gym.Env):
             base_reward = sum(((self.data.close.values / last_day_memory.close.values) - 1) * weights)
 
             if self.reward_mode == "atr":
-                # --- ATR Shaping ---
                 high = self.data.high.values
                 low = self.data.low.values
                 close = self.data.close.values
@@ -285,7 +288,6 @@ class StockPortfolioEnv(gym.Env):
                 self.reward = base_reward + alpha * vol_t
 
             elif self.reward_mode == "sharpe":
-                # --- Sharpe Shaping ---
                 r_f = 0.0001
                 eps = 1e-6
                 
@@ -299,7 +301,6 @@ class StockPortfolioEnv(gym.Env):
                 self.reward = (base_reward - r_f) / sigma_t
 
             else:
-                # --- No Shaping (Default) ---
                 self.reward = base_reward
 
         return self.state, self.reward, self.terminal, {}

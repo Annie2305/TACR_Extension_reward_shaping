@@ -1,4 +1,2 @@
 Dataset,Reward_Mode,Initial_Asset,Final_Asset,Sharpe_Ratio,Sortino_Ratio,MDD,Turnover_Rate
-dow,,1000000,1360884,0.6965,0.9116,-0.3309,0.2249
 dow,Atr,1000000,1727430,1.0958,1.3943,-0.3072,0.162
-dow,Sharpe,1000000,1463545,0.9597,1.2049,-0.3096,0.0798
