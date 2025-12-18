@@ -110,7 +110,7 @@ class trajectory:
 
             # --------- 2. Sharpe-like shaping ---------
             elif self.reward_mode == "sharpe":
-                r_f = 0.0001
+                r_f = 0.02/365
                 eps = 1e-6
                 
                 # Calculate historical market volatility up to this point
