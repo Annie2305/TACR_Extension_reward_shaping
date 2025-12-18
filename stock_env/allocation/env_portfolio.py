@@ -288,7 +288,7 @@ class StockPortfolioEnv(gym.Env):
                 self.reward = base_reward + alpha * vol_t
 
             elif self.reward_mode == "sharpe":
-                r_f = 0.0001
+                r_f = 0.02 / 365
                 eps = 1e-6
                 
                 window = 20
