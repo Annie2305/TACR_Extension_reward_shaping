@@ -69,9 +69,9 @@ def compare_results(dataset):
                  linewidth=1.5)
 
     # Style formatting (Matching your reference)
-    plt.title(f"Cumulative Rewards Comparison ({dataset})", fontsize=16)
+    plt.title(f"Cumulative Portfolio Value Comparison ({dataset})", fontsize=16)
     plt.xlabel("Step (Date)", fontsize=12)
-    plt.ylabel("Cumulative Reward (%)", fontsize=12)
+    plt.ylabel("Cumulative Portfolio Value (%)", fontsize=12)
     plt.legend(loc='upper left', fontsize=12)
     
     # Grid and Ticks

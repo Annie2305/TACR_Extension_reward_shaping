@@ -288,7 +288,11 @@ class StockPortfolioEnv(gym.Env):
                 self.reward = base_reward + alpha * vol_t
 
             elif self.reward_mode == "sharpe":
+<<<<<<< HEAD
                 r_f = 0.02 / 365
+=======
+                r_f = 0.02 / 252  # Daily risk-free rate
+>>>>>>> ef86315 (update the sharpe-based reward mode results plot and table.)
                 eps = 1e-6
                 
                 window = 20
